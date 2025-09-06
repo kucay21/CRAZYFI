@@ -20,6 +20,7 @@
     .center{text-align:center;padding:20px}
     .addr{font-weight:700;color:#9ae6b4}
     .wallet-actions{display:flex;gap:8px;align-items:center}
+    input.readonly {width:90%;padding:8px;text-align:center;background:#111;border:1px solid #333;color:#9ae6b4;border-radius:6px;}
     @media(min-width:768px){
       nav.menu{position:static;display:flex;flex-direction:row;background:transparent;border-top:0}
       nav.menu a{border-bottom:0;padding:8px 12px}
@@ -29,7 +30,6 @@
 <body>
   <header>
     <div class="brand">Crazy Snake</div>
-
     <div class="wallet-actions">
       <div id="addrDisplay" style="margin-right:10px;"></div>
       <button id="connectBtn" class="btn">Connect Wallet</button>
@@ -51,7 +51,6 @@
     <div class="banner">
       <img src="https://raw.githubusercontent.com/kucay21/Crazy_snake_asset/main/file_00000000fe0c61f78bcdbf30f58bf219.png" alt="Crazy Snake Banner">
     </div>
-
     <div class="center">
       <h1>Welcome to Crazy Snake</h1>
       <p style="color:var(--muted)">Play, stake, and earn with the craziest snake on-chain!</p>
@@ -59,128 +58,109 @@
         <button class="btn" onclick="startGame()">Play Now</button>
       </div>
     </div>
+
+    <!-- Referral Section -->
+    <section class="center" style="margin-top:30px;">
+      <h2>Referral</h2>
+      <p>Bagikan link ini ke temanmu:</p>
+      <input id="refLink" class="readonly" readonly />
+      <p id="refSaved" style="color:var(--muted);margin-top:8px;"></p>
+    </section>
+
+    <!-- Unstake Section -->
+    <section class="center" style="margin-top:30px;">
+      <h2>Unstake NFT</h2>
+      <p>Lepas NFT kamu dari staking (dummy button, nanti bisa dihubungkan ke smart contract):</p>
+      <button class="btn" onclick="unstakeNFT()">Unstake Now</button>
+      <p id="unstakeMsg" style="color:var(--muted);margin-top:8px;"></p>
+    </section>
   </main>
 
-  <!-- Ethers minimal (v5) -->
+  <!-- Ethers minimal -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
   <script>
-    // ---------- CONFIG for Base ----------
-    const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
-    const BASE_CHAIN_PARAMS = {
-      chainId: BASE_CHAIN_ID_HEX,
-      chainName: 'Base Mainnet',
-      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-      rpcUrls: ['https://mainnet.base.org'],
-      blockExplorerUrls: ['https://base.blockscout.com/']
-    };
-
-    // ---------- UI helpers ----------
     const connectBtn = document.getElementById('connectBtn');
     const addrDisplay = document.getElementById('addrDisplay');
     const menu = document.getElementById('menu');
 
-    function toggleMenu(){ menu.style.display = (menu.style.display === 'flex' || menu.style.display === 'block') ? 'none' : (window.innerWidth >= 768 ? 'flex' : 'block'); }
+    function toggleMenu(){ 
+      menu.style.display = (menu.style.display === 'flex' || menu.style.display === 'block') ? 'none' : (window.innerWidth >= 768 ? 'flex' : 'block'); 
+    }
 
-    // Show short address like 0x1234...abcd
     function short(addr){ if(!addr) return ''; return addr.slice(0,6) + '...' + addr.slice(-4); }
-
-    // Persist and show
     function setAddressUI(addr){
       if(addr){
         addrDisplay.innerHTML = '<span class="addr">'+short(addr)+'</span>';
         connectBtn.textContent = 'Disconnect';
         connectBtn.onclick = disconnect;
         localStorage.setItem('cs_address', addr);
+        updateReferralUI(addr);
       } else {
         addrDisplay.textContent = '';
         connectBtn.textContent = 'Connect Wallet';
         connectBtn.onclick = connectWallet;
         localStorage.removeItem('cs_address');
+        updateReferralUI(null);
       }
     }
 
-    // ---------- Connection logic ----------
     async function connectWallet(){
-      try {
-        if(!window.ethereum){
-          alert('No injected wallet found. Install MetaMask or use a Web3-enabled browser.');
-          return;
-        }
-
-        // request accounts
+      try{
+        if(!window.ethereum){ alert('No wallet found'); return; }
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         const addr = accounts[0];
-        // ensure chain is Base
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-        if(chainId !== BASE_CHAIN_ID_HEX){
-          try {
-            await window.ethereum.request({
-              method: 'wallet_switchEthereumChain',
-              params: [{ chainId: BASE_CHAIN_ID_HEX }]
-            });
-          } catch (switchErr){
-            // 4902 = chain not added
-            if (switchErr && switchErr.code === 4902) {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [BASE_CHAIN_PARAMS]
-              });
-            } else {
-              console.warn('Switch chain failed', switchErr);
-            }
-          }
-        }
-
-        // use ethers provider (optional for later)
-        window.cs_provider = new ethers.providers.Web3Provider(window.ethereum);
-        window.cs_signer = window.cs_provider.getSigner();
-
         setAddressUI(addr);
-        // listen for accounts/chain changes
-        window.ethereum.on('accountsChanged', (accs) => {
-          if(accs && accs.length) setAddressUI(accs[0]); else setAddressUI(null);
-        });
-        window.ethereum.on('chainChanged', (cid) => {
-          // refresh to adapt to new chain
-          console.log('chain changed to', cid);
-          setTimeout(()=>location.reload(), 500);
-        });
-      } catch (err){
-        console.error(err);
-        alert('Gagal connect wallet: ' + (err.message || err));
+      }catch(e){ console.error(e); alert('Gagal connect wallet: '+e.message); }
+    }
+
+    function disconnect(){ setAddressUI(null); }
+    function connectFromMenu(e){ e.preventDefault(); connectWallet(); if(window.innerWidth<768) menu.style.display='none'; }
+
+    // ---------- Referral ----------
+    function saveReferral(){
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if(ref){
+        localStorage.setItem("cs_referral", ref);
+        console.log("Referral saved:", ref);
       }
     }
+    function getReferral(){ return localStorage.getItem("cs_referral") || null; }
 
-    function disconnect(){
-      // can't fully disconnect injected wallets; just clear UI/local state
-      setAddressUI(null);
-      // optional: remove events
-      try {
-        window.ethereum && window.ethereum.removeListener && window.ethereum.removeListener('accountsChanged', ()=>{});
-      } catch(e){}
-    }
+    function updateReferralUI(addr){
+      const refLink = document.getElementById("refLink");
+      const refSaved = document.getElementById("refSaved");
+      if(!refLink) return;
 
-    function connectFromMenu(e){
-      e.preventDefault();
-      connectWallet();
-      // hide menu on mobile
-      if(window.innerWidth < 768) menu.style.display = 'none';
-    }
-
-    // autoconnect if previously connected
-    (function init(){
-      const stored = localStorage.getItem('cs_address');
-      if(stored){
-        // show it, but better to still ensure wallet still accessible
-        setAddressUI(stored);
+      if(addr){
+        refLink.value = window.location.origin + window.location.pathname + "?ref=" + addr;
       } else {
-        setAddressUI(null);
+        refLink.value = "";
       }
-    })();
-
-    function startGame(){
-      alert('Play now! (This is a placeholder while game integration is prepared.)');
+      const saved = getReferral();
+      if(saved){
+        refSaved.textContent = "You were referred by: " + saved.slice(0,6)+"..."+saved.slice(-4);
+      } else {
+        refSaved.textContent = "";
+      }
     }
+
+    // ---------- Unstake Dummy ----------
+    function unstakeNFT(){
+      const msg = document.getElementById("unstakeMsg");
+      msg.textContent = "Unstake process triggered (dummy).";
+      console.log("Unstake NFT clicked");
+      // nanti tinggal panggil smart contract di sini
+    }
+
+    function startGame(){ alert('Play now! (placeholder)'); }
+
+    // ---------- INIT ----------
+    (function init(){
+      saveReferral();
+      const stored = localStorage.getItem('cs_address');
+      if(stored){ setAddressUI(stored); } else { setAddressUI(null); }
+    })();
   </script>
 </body>
 </html>
