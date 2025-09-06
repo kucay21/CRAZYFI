@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Crazy Snake - Home</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#000; --panel:#111; --muted:#999; --accent:#22c55e; }
+    body{margin:0;background:var(--bg);color:#fff;font-family:Arial, sans-serif;}
+    header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel);position:relative;z-index:10;}
+    .brand{font-weight:700;}
+    .menu-btn{font-size:28px;cursor:pointer}
+    nav.menu{display:none;flex-direction:column;background:#0f1720;position:absolute;top:56px;left:0;width:100%;z-index:9;border-top:1px solid #0b1220}
+    nav.menu a{padding:14px 16px;text-decoration:none;color:#fff;border-bottom:1px solid #0b1220}
+    nav.menu a:hover{background:#0b1220}
+    .btn{background:var(--accent);color:#051014;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+    .small-btn{background:transparent;border:1px solid #2d3b33;color:var(--accent);padding:6px 8px;border-radius:6px;cursor:pointer}
+    .banner{width:100%;max-height:360px;overflow:hidden;display:block}
+    .banner img{width:100%;height:auto;display:block;object-fit:cover}
+    .center{text-align:center;padding:20px}
+    .addr{font-weight:700;color:#9ae6b4}
+    .wallet-actions{display:flex;gap:8px;align-items:center}
+    @media(min-width:768px){
+      nav.menu{position:static;display:flex;flex-direction:row;background:transparent;border-top:0}
+      nav.menu a{border-bottom:0;padding:8px 12px}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Crazy Snake</div>
+
+    <div class="wallet-actions">
+      <div id="addrDisplay" style="margin-right:10px;"></div>
+      <button id="connectBtn" class="btn">Connect Wallet</button>
+      <span class="menu-btn" onclick="toggleMenu()">☰</span>
+    </div>
+  </header>
+
+  <nav class="menu" id="menu">
+    <a href="index.html">Home</a>
+    <a href="staking.html">Staking</a>
+    <a href="marketplace.html">Marketplace</a>
+    <a href="whitepaper.html">Whitepaper</a>
+    <a href="guide.html">Guide</a>
+    <a href="setting.html">Setting</a>
+    <a href="#" onclick="connectFromMenu(event)">Connect Wallet</a>
+  </nav>
+
+  <main>
+    <div class="banner">
+      <img src="https://raw.githubusercontent.com/kucay21/Crazy_snake_asset/main/file_00000000fe0c61f78bcdbf30f58bf219.png" alt="Crazy Snake Banner">
+    </div>
+
+    <div class="center">
+      <h1>Welcome to Crazy Snake</h1>
+      <p style="color:var(--muted)">Play, stake, and earn with the craziest snake on-chain!</p>
+      <div style="margin-top:14px">
+        <button class="btn" onclick="startGame()">Play Now</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Ethers minimal (v5) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script>
+    // ---------- CONFIG for Base ----------
+    const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
+    const BASE_CHAIN_PARAMS = {
+      chainId: BASE_CHAIN_ID_HEX,
+      chainName: 'Base Mainnet',
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      rpcUrls: ['https://mainnet.base.org'],
+      blockExplorerUrls: ['https://base.blockscout.com/']
+    };
+
+    // ---------- UI helpers ----------
+    const connectBtn = document.getElementById('connectBtn');
+    const addrDisplay = document.getElementById('addrDisplay');
+    const menu = document.getElementById('menu');
+
+    function toggleMenu(){ menu.style.display = (menu.style.display === 'flex' || menu.style.display === 'block') ? 'none' : (window.innerWidth >= 768 ? 'flex' : 'block'); }
+
+    // Show short address like 0x1234...abcd
+    function short(addr){ if(!addr) return ''; return addr.slice(0,6) + '...' + addr.slice(-4); }
+
+    // Persist and show
+    function setAddressUI(addr){
+      if(addr){
+        addrDisplay.innerHTML = '<span class="addr">'+short(addr)+'</span>';
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.onclick = disconnect;
+        localStorage.setItem('cs_address', addr);
+      } else {
+        addrDisplay.textContent = '';
+        connectBtn.textContent = 'Connect Wallet';
+        connectBtn.onclick = connectWallet;
+        localStorage.removeItem('cs_address');
+      }
+    }
+
+    // ---------- Connection logic ----------
+    async function connectWallet(){
+      try {
+        if(!window.ethereum){
+          alert('No injected wallet found. Install MetaMask or use a Web3-enabled browser.');
+          return;
+        }
+
+        // request accounts
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const addr = accounts[0];
+        // ensure chain is Base
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if(chainId !== BASE_CHAIN_ID_HEX){
+          try {
+            await window.ethereum.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: BASE_CHAIN_ID_HEX }]
+            });
+          } catch (switchErr){
+            // 4902 = chain not added
+            if (switchErr && switchErr.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [BASE_CHAIN_PARAMS]
+              });
+            } else {
+              console.warn('Switch chain failed', switchErr);
+            }
+          }
+        }
+
+        // use ethers provider (optional for later)
+        window.cs_provider = new ethers.providers.Web3Provider(window.ethereum);
+        window.cs_signer = window.cs_provider.getSigner();
+
+        setAddressUI(addr);
+        // listen for accounts/chain changes
+        window.ethereum.on('accountsChanged', (accs) => {
+          if(accs && accs.length) setAddressUI(accs[0]); else setAddressUI(null);
+        });
+        window.ethereum.on('chainChanged', (cid) => {
+          // refresh to adapt to new chain
+          console.log('chain changed to', cid);
+          setTimeout(()=>location.reload(), 500);
+        });
+      } catch (err){
+        console.error(err);
+        alert('Gagal connect wallet: ' + (err.message || err));
+      }
+    }
+
+    function disconnect(){
+      // can't fully disconnect injected wallets; just clear UI/local state
+      setAddressUI(null);
+      // optional: remove events
+      try {
+        window.ethereum && window.ethereum.removeListener && window.ethereum.removeListener('accountsChanged', ()=>{});
+      } catch(e){}
+    }
+
+    function connectFromMenu(e){
+      e.preventDefault();
+      connectWallet();
+      // hide menu on mobile
+      if(window.innerWidth < 768) menu.style.display = 'none';
+    }
+
+    // autoconnect if previously connected
+    (function init(){
+      const stored = localStorage.getItem('cs_address');
+      if(stored){
+        // show it, but better to still ensure wallet still accessible
+        setAddressUI(stored);
+      } else {
+        setAddressUI(null);
+      }
+    })();
+
+    function startGame(){
+      alert('Play now! (This is a placeholder while game integration is prepared.)');
+    }
+  </script>
+</body>
+</html>

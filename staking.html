@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Crazy Snake - Staking</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#000; --panel:#111; --accent:#22c55e; --muted:#999; }
+    body{margin:0;background:var(--bg);color:#fff;font-family:Arial, sans-serif}
+    header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:var(--panel)}
+    .menu-btn{font-size:28px;cursor:pointer}
+    nav.menu{display:none;flex-direction:column;background:#0f1720;position:absolute;top:56px;left:0;width:100%}
+    nav.menu a{padding:14px 16px;text-decoration:none;color:#fff;border-bottom:1px solid #0b1220}
+    main{padding:18px}
+    label{display:block;margin-top:10px}
+    input,button{padding:8px;margin-top:6px}
+    .btn{background:var(--accent);color:#051014;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Crazy Snake</div>
+    <div>
+      <span id="addrDisplay"></span>
+      <button id="connectBtn" class="btn">Connect Wallet</button>
+      <span class="menu-btn" onclick="toggleMenu()">☰</span>
+    </div>
+  </header>
+
+  <nav class="menu" id="menu">
+    <a href="index.html">Home</a>
+    <a href="staking.html">Staking</a>
+    <a href="marketplace.html">Marketplace</a>
+    <a href="whitepaper.html">Whitepaper</a>
+    <a href="guide.html">Guide</a>
+    <a href="setting.html">Setting</a>
+    <a href="#" onclick="connectFromMenu(event)">Connect Wallet</a>
+  </nav>
+
+  <main>
+    <h1>Staking</h1>
+    <p style="color:var(--muted)">Stake your Crazy Snake tokens here to earn rewards. (Demo UI)</p>
+
+    <label for="amount">Amount to stake</label>
+    <input id="amount" type="number" placeholder="0" />
+
+    <div style="margin-top:10px">
+      <button class="btn" onclick="stake()">Stake</button>
+      <button style="margin-left:8px" onclick="unstake()">Unstake</button>
+    </div>
+
+    <p style="margin-top:20px;color:var(--muted)">Connected address: <span id="connectedAddress">-</span></p>
+    <p><a href="index.html" style="color:#60a5fa">⬅ Back to Home</a></p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script>
+    // copy same connection logic from index.html (to keep each page standalone)
+    const BASE_CHAIN_ID_HEX = '0x2105';
+    const BASE_CHAIN_PARAMS = {
+      chainId: BASE_CHAIN_ID_HEX,
+      chainName: 'Base Mainnet',
+      nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+      rpcUrls: ['https://mainnet.base.org'],
+      blockExplorerUrls: ['https://base.blockscout.com/']
+    };
+
+    const connectBtn = document.getElementById('connectBtn');
+    const addrDisplay = document.getElementById('addrDisplay');
+    const connectedAddress = document.getElementById('connectedAddress');
+    const menu = document.getElementById('menu');
+
+    function toggleMenu(){ menu.style.display = (menu.style.display === 'flex' || menu.style.display === 'block') ? 'none' : (window.innerWidth >= 768 ? 'flex' : 'block'); }
+
+    function short(addr){ if(!addr) return ''; return addr.slice(0,6) + '...' + addr.slice(-4); }
+    function setAddressUI(addr){
+      if(addr){
+        addrDisplay.innerHTML = '<strong style="color:#9ae6b4">'+short(addr)+'</strong>';
+        connectedAddress.textContent = addr;
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.onclick = disconnect;
+        localStorage.setItem('cs_address', addr);
+      } else {
+        addrDisplay.textContent = '';
+        connectedAddress.textContent = '-';
+        connectBtn.textContent = 'Connect Wallet';
+        connectBtn.onclick = connectWallet;
+        localStorage.removeItem('cs_address');
+      }
+    }
+
+    async function connectWallet(){
+      try {
+        if(!window.ethereum){ alert('No injected wallet found.'); return; }
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const addr = accounts[0];
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if(chainId !== BASE_CHAIN_ID_HEX){
+          try {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_CHAIN_ID_HEX }] });
+          } catch (switchErr){
+            if (switchErr && switchErr.code === 4902) {
+              await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [BASE_CHAIN_PARAMS] });
+            }
+          }
+        }
+        window.cs_provider = new ethers.providers.Web3Provider(window.ethereum);
+        window.cs_signer = window.cs_provider.getSigner();
+        setAddressUI(addr);
+        window.ethereum.on('accountsChanged', (accs) => { if(accs && accs.length) setAddressUI(accs[0]); else setAddressUI(null); });
+        window.ethereum.on('chainChanged', ()=> setTimeout(()=>location.reload(), 200));
+      } catch(e){ console.error(e); alert('Connect failed: '+(e.message||e)); }
+    }
+
+    function disconnect(){ setAddressUI(null); try{ window.ethereum && window.ethereum.removeListener && window.ethereum.removeListener('accountsChanged', ()=>{}); }catch(e){} }
+
+    function connectFromMenu(e){ e.preventDefault(); connectWallet(); if(window.innerWidth < 768) menu.style.display = 'none'; }
+
+    (function init(){ const stored=localStorage.getItem('cs_address'); if(stored) setAddressUI(stored); else setAddressUI(null); })();
+
+    // Demo stake functions (no on-chain interaction yet)
+    function stake(){
+      const a = document.getElementById('amount').value;
+      if(!a || a <= 0) return alert('Masukkan jumlah token untuk stake');
+      if(!localStorage.getItem('cs_address')) return alert('Connect wallet dulu');
+      alert('Request stake: ' + a + ' tokens (demo)');
+    }
+    function unstake(){ alert('Demo unstake (placeholder)'); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Guide - Crazy Snake</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>body{margin:0;background:#000;color:#fff;font-family:Arial;padding:18px} header{display:flex;justify-content:space-between;padding:10px 0;background:#111}</style>
+</head>
+<body>
+  <header>
+    <div class="brand">Crazy Snake</div>
+    <div>
+      <span id="addrDisplay"></span>
+      <button id="connectBtn" style="background:#22c55e;border:none;padding:8px;border-radius:8px">Connect Wallet</button>
+      <span style="font-size:26px;cursor:pointer" onclick="toggleMenu()">☰</span>
+    </div>
+  </header>
+
+  <nav id="menu" style="display:none">
+    <a href="index.html">Home</a>
+    <a href="staking.html">Staking</a>
+    <a href="marketplace.html">Marketplace</a>
+    <a href="whitepaper.html">Whitepaper</a>
+    <a href="guide.html">Guide</a>
+    <a href="setting.html">Setting</a>
+    <a href="#" onclick="connectFromMenu(event)">Connect Wallet</a>
+  </nav>
+
+  <main>
+    <h1>Guide</h1>
+    <p style="color:#9ca3af">Panduan singkat:</p>
+    <ol>
+      <li>Connect your wallet (MetaMask mobile / Wallet with Browser)</li>
+      <li>Switch network to Base (the site will request it automatically)</li>
+      <li>Stake tokens from Staking page (when implemented)</li>
+    </ol>
+    <p><a href="index.html" style="color:#60a5fa">⬅ Back to Home</a></p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script>
+    // same connect logic (keep pages independent)
+    const BASE_CHAIN_ID_HEX = '0x2105';
+    const BASE_CHAIN_PARAMS = { chainId: BASE_CHAIN_ID_HEX, chainName: 'Base Mainnet', nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18}, rpcUrls:['https://mainnet.base.org'], blockExplorerUrls:['https://base.blockscout.com/'] };
+    const connectBtn = document.getElementById('connectBtn');
+    const addrDisplay = document.getElementById('addrDisplay');
+    const menu = document.getElementById('menu');
+    function toggleMenu(){ menu.style.display = (menu.style.display === 'block') ? 'none' : 'block'; }
+    function short(a){ if(!a) return ''; return a.slice(0,6)+'...'+a.slice(-4); }
+    function setAddressUI(addr){ if(addr){ addrDisplay.innerHTML = '<strong style="color:#9ae6b4">'+short(addr)+'</strong>'; connectBtn.textContent='Disconnect'; connectBtn.onclick=disconnect; localStorage.setItem('cs_address', addr);} else { addrDisplay.textContent=''; connectBtn.textContent='Connect Wallet'; connectBtn.onclick=connectWallet; localStorage.removeItem('cs_address'); } }
+
+    async function connectWallet(){ try{ if(!window.ethereum){ alert('No injected wallet.'); return;} const acc=await window.ethereum.request({method:'eth_requestAccounts'}); const addr=acc[0]; const chainId=await window.ethereum.request({method:'eth_chainId'}); if(chainId!==BASE_CHAIN_ID_HEX){ try{ await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:BASE_CHAIN_ID_HEX}]}); }catch(s){ if(s && s.code===4902) await window.ethereum.request({method:'wallet_addEthereumChain', params:[BASE_CHAIN_PARAMS]}); } } window.cs_provider=new ethers.providers.Web3Provider(window.ethereum); window.cs_signer=window.cs_provider.getSigner(); setAddressUI(addr); window.ethereum.on('accountsChanged',(a)=>{ if(a && a.length) setAddressUI(a[0]); else setAddressUI(null); }); window.ethereum.on('chainChanged',()=>setTimeout(()=>location.reload(),200)); }catch(e){ console.error(e); alert('Connect failed'); } }
+    function disconnect(){ setAddressUI(null); try{ window.ethereum && window.ethereum.removeListener && window.ethereum.removeListener('accountsChanged',()=>{});}catch(e){} }
+    function connectFromMenu(e){ e.preventDefault(); connectWallet(); if(window.innerWidth<768) menu.style.display='none'; }
+    (function(){ const s=localStorage.getItem('cs_address'); if(s) setAddressUI(s); else setAddressUI(null); })();
+  </script>
+</body>
+</html>
